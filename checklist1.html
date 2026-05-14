@@ -1,0 +1,270 @@
+{% extends "base.html" %}
+
+{% block title %}HighStudy - Checklist{% endblock %}
+
+{% block extra_styles %}
+<style>
+  h1 { font-size: 32px; color: #a78bfa; margin-bottom: 30px; }
+  .container { width: 100%; max-width: 700px; }
+  .calendar { background: #16213e; border-radius: 16px; padding: 24px; margin-bottom: 30px; }
+  .cal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  .cal-header h2 { font-size: 20px; color: #a78bfa; }
+  .cal-header button {
+    background: none; border: 1px solid #7c3aed; color: #a78bfa;
+    padding: 4px 12px; border-radius: 8px; cursor: pointer; font-size: 16px;
+  }
+  .cal-header button:hover { background: #7c3aed; color: white; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+  .cal-day-name { text-align: center; font-size: 12px; color: #a78bfa; padding: 4px 0; }
+  .cal-day {
+    text-align: center; padding: 8px 4px; border-radius: 8px;
+    font-size: 14px; cursor: pointer; color: #e2d9f3;
+  }
+  .cal-day:hover { background: #2d2d5e; }
+  .cal-day.today { background: #7c3aed; font-weight: bold; }
+  .cal-day.selected { background: #5b21b6; border: 2px solid #a78bfa; }
+  .cal-day.has-tasks { position: relative; }
+  .cal-day.has-tasks::after {
+    content: ""; display: block; width: 5px; height: 5px;
+    background: #5dcaa5; border-radius: 50%; margin: 2px auto 0;
+  }
+  .cal-day.empty { cursor: default; pointer-events: none; }
+  .tasks { background: #16213e; border-radius: 16px; padding: 24px; }
+  .tasks h2 { font-size: 20px; color: #a78bfa; margin-bottom: 16px; }
+  .selected-date { font-size: 14px; color: #c4b5fd; margin-bottom: 14px; }
+  .add-row { display: flex; gap: 8px; margin-bottom: 16px; }
+  .add-row input {
+    flex: 1; padding: 10px 14px; border-radius: 10px;
+    border: 1px solid #7c3aed; background: #1a1a2e;
+    color: white; font-size: 15px;
+  }
+  .add-row input:focus { outline: none; border-color: #a78bfa; }
+  .add-row button {
+    padding: 10px 20px; border-radius: 10px; border: none;
+    background: #7c3aed; color: white; font-size: 15px; cursor: pointer;
+  }
+  .add-row button:hover { background: #6d28d9; }
+  ul { list-style: none; }
+  ul li {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 0; border-bottom: 1px solid #2d2d4e; font-size: 15px;
+  }
+  ul li:last-child { border-bottom: none; }
+  ul li.done span { text-decoration: line-through; color: #888; }
+  ul li input[type="checkbox"] { accent-color: #7c3aed; width: 18px; height: 18px; cursor: pointer; flex-shrink: 0; }
+  ul li .delete {
+    margin-left: auto; background: none; border: none;
+    color: #993556; font-size: 18px; cursor: pointer; line-height: 1;
+  }
+  ul li .delete:hover { color: #f472b6; }
+  .empty-msg { color: #6b7280; font-size: 14px; font-style: italic; }
+  .error-msg { color: #f87171; font-size: 13px; margin-top: 8px; min-height: 18px; }
+</style>
+{% endblock %}
+
+{% block content %}
+  <h1>Checklist</h1>
+  <div class="container">
+    <div class="calendar">
+      <div class="cal-header">
+        <button onclick="changeMonth(-1)">&#8249;</button>
+        <h2 id="cal-title"></h2>
+        <button onclick="changeMonth(1)">&#8250;</button>
+      </div>
+      <div class="cal-grid" id="cal-grid"></div>
+    </div>
+
+    <div class="tasks">
+      <h2>Tasks</h2>
+      <div class="selected-date" id="selected-date"></div>
+      <div class="add-row">
+        <input type="text" id="task-input" placeholder="Add a task for this date..." maxlength="200" />
+        <button onclick="addTask()">Add</button>
+      </div>
+      <div class="error-msg" id="error-msg"></div>
+      <ul id="task-list"></ul>
+    </div>
+  </div>
+
+  <a href="/" class="back">← Back to home</a>
+
+  <script>
+    const MONTHS = ["January","February","March","April","May","June",
+                    "July","August","September","October","November","December"];
+    const DAY_NAMES = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+
+    const today = new Date();
+    const todayStr = formatDate(today);
+    let currentYear = today.getFullYear();
+    let currentMonth = today.getMonth();
+    let selectedDate = todayStr;
+    let tasks = {};
+
+    function formatDate(d) {
+      return d.getFullYear() + "-"
+        + String(d.getMonth() + 1).padStart(2, "0") + "-"
+        + String(d.getDate()).padStart(2, "0");
+    }
+
+    function friendlyDate(dateStr) {
+      const [y, m, d] = dateStr.split("-");
+      return MONTHS[parseInt(m) - 1] + " " + parseInt(d) + ", " + y;
+    }
+
+    function showError(msg) {
+      const el = document.getElementById("error-msg");
+      el.textContent = msg;
+      setTimeout(() => { el.textContent = ""; }, 3000);
+    }
+
+    async function loadTasks() {
+      try {
+        const res = await fetch("/api/tasks");
+        if (!res.ok) throw new Error("Server error " + res.status);
+        tasks = await res.json();
+      } catch (e) {
+        showError("Could not load tasks. Is the server running?");
+        tasks = {};
+      }
+      buildCalendar();
+      renderTasks();
+    }
+
+    async function saveTasks() {
+      try {
+        const res = await fetch("/api/tasks", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(tasks)
+        });
+        if (!res.ok) throw new Error("Save failed");
+      } catch (e) {
+        showError("Could not save tasks. Changes may be lost.");
+      }
+    }
+
+    function buildCalendar() {
+      document.getElementById("cal-title").textContent =
+        MONTHS[currentMonth] + " " + currentYear;
+
+      const grid = document.getElementById("cal-grid");
+      grid.innerHTML = "";
+
+      DAY_NAMES.forEach(name => {
+        const el = document.createElement("div");
+        el.className = "cal-day-name";
+        el.textContent = name;
+        grid.appendChild(el);
+      });
+
+      const firstDay = new Date(currentYear, currentMonth, 1).getDay();
+      const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+
+      for (let i = 0; i < firstDay; i++) {
+        const el = document.createElement("div");
+        el.className = "cal-day empty";
+        grid.appendChild(el);
+      }
+
+      for (let d = 1; d <= daysInMonth; d++) {
+        const dateStr = currentYear + "-"
+          + String(currentMonth + 1).padStart(2, "0") + "-"
+          + String(d).padStart(2, "0");
+
+        const el = document.createElement("div");
+        el.className = "cal-day";
+        el.textContent = d;
+
+        if (dateStr === todayStr) el.classList.add("today");
+        if (dateStr === selectedDate) el.classList.add("selected");
+        if (tasks[dateStr] && tasks[dateStr].length > 0) el.classList.add("has-tasks");
+
+        el.addEventListener("click", () => selectDate(dateStr));
+        grid.appendChild(el);
+      }
+    }
+
+    function changeMonth(dir) {
+      currentMonth += dir;
+      if (currentMonth < 0)  { currentMonth = 11; currentYear--; }
+      if (currentMonth > 11) { currentMonth = 0;  currentYear++; }
+      buildCalendar();
+      document.getElementById("selected-date").textContent =
+        "Tasks for " + friendlyDate(selectedDate);
+    }
+
+    function selectDate(dateStr) {
+      selectedDate = dateStr;
+      buildCalendar();
+      renderTasks();
+    }
+
+    function renderTasks() {
+      document.getElementById("selected-date").textContent =
+        "Tasks for " + friendlyDate(selectedDate);
+
+      const list = document.getElementById("task-list");
+      list.innerHTML = "";
+      const dayTasks = tasks[selectedDate] || [];
+
+      if (dayTasks.length === 0) {
+        const li = document.createElement("li");
+        li.innerHTML = '<span class="empty-msg">No tasks yet for this day.</span>';
+        list.appendChild(li);
+        return;
+      }
+
+      dayTasks.forEach((task, i) => {
+        const li = document.createElement("li");
+        if (task.done) li.classList.add("done");
+
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = task.done;
+        cb.addEventListener("change", async () => {
+          tasks[selectedDate][i].done = cb.checked;
+          await saveTasks();
+          buildCalendar();
+          renderTasks();
+        });
+
+        const span = document.createElement("span");
+        span.textContent = task.text;
+
+        const del = document.createElement("button");
+        del.className = "delete";
+        del.textContent = "×";
+        del.title = "Delete task";
+        del.addEventListener("click", async () => {
+          tasks[selectedDate].splice(i, 1);
+          await saveTasks();
+          buildCalendar();
+          renderTasks();
+        });
+
+        li.appendChild(cb);
+        li.appendChild(span);
+        li.appendChild(del);
+        list.appendChild(li);
+      });
+    }
+
+    async function addTask() {
+      const input = document.getElementById("task-input");
+      const text = input.value.trim();
+      if (!text) return;
+      if (!tasks[selectedDate]) tasks[selectedDate] = [];
+      tasks[selectedDate].push({ text, done: false });
+      input.value = "";
+      await saveTasks();
+      buildCalendar();
+      renderTasks();
+    }
+
+    document.getElementById("task-input").addEventListener("keydown", e => {
+      if (e.key === "Enter") addTask();
+    });
+
+    loadTasks();
+  </script>
+{% endblock %}
