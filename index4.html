@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}HighStudy{% endblock %}
+
+{% block extra_styles %}
+<style>
+  body { justify-content: center; text-align: center; }
+  h1 { font-size: 52px; color: #a78bfa; margin-bottom: 10px; letter-spacing: 2px; }
+  .tagline { font-size: 18px; color: #c4b5fd; margin-bottom: 20px; }
+  .quote-box {
+    background: #16213e;
+    border: 1px solid #a78bfa;
+    border-radius: 12px;
+    padding: 18px 28px;
+    max-width: 480px;
+    font-size: 15px;
+    color: #e2d9f3;
+    font-style: italic;
+    margin-bottom: 50px;
+  }
+  .cards { display: flex; gap: 24px; flex-wrap: wrap; justify-content: center; }
+  .card {
+    background: #16213e;
+    border: 2px solid #7c3aed;
+    border-radius: 16px;
+    padding: 36px 28px;
+    width: 200px;
+    text-decoration: none;
+    color: white;
+    transition: transform 0.2s, background 0.2s;
+    cursor: pointer;
+  }
+  .card:hover { background: #7c3aed; transform: translateY(-4px); }
+  .card-icon { font-size: 40px; margin-bottom: 14px; }
+  .card-title { font-size: 18px; font-weight: bold; color: #e2d9f3; }
+  .card-desc { font-size: 13px; color: #a78bfa; margin-top: 6px; }
+  .card:hover .card-desc { color: #e2d9f3; }
+</style>
+{% endblock %}
+
+{% block content %}
+  <h1>HighStudy</h1>
+  <p class="tagline">Your study companion for beating procrastination.</p>
+
+  <div class="quote-box" id="quote"></div>
+
+  <div class="cards">
+    <a href="/timer" class="card">
+      <div class="card-icon">⏱️</div>
+      <div class="card-title">Pomodoro Timer</div>
+      <div class="card-desc">Focus in short bursts with timed breaks</div>
+    </a>
+    <a href="/checklist" class="card">
+      <div class="card-icon">📅</div>
+      <div class="card-title">Checklist</div>
+      <div class="card-desc">Calendar + tasks to stay organized</div>
+    </a>
+  </div>
+
+  <script>
+    const quotes = [
+      "You don't have to be great to start, but you have to start to be great.",
+      "Small steps every day lead to big results.",
+      "Done is better than perfect.",
+      "You've got this. One task at a time.",
+      "Start now. Not tomorrow. Now.",
+      "Progress, not perfection.",
+      "Every expert was once a beginner.",
+      "Believe you can and you're halfway there."
+    ];
+    document.getElementById("quote").textContent = '"' + quotes[Math.floor(Math.random() * quotes.length)] + '"';
+  </script>
+{% endblock %}
